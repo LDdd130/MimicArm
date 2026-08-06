@@ -14,7 +14,7 @@
 
 <!-- TODO: assets/ 폴더에 아래 이미지를 추가한 뒤 주석을 해제하세요. -->
 <p>
-  <img src="./MimicArm_Working/assets/image.png" width="250" alt="MimicArm">
+  <img src="./MimicArm_Working/asset/image.png" width="250" alt="MimicArm">
   &nbsp;&nbsp;
   <!-- <img src="./assets/basys3_panel.png" width="35%" alt="Basys-3 Control Panel"> -->
 </p>
