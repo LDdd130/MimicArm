@@ -62,7 +62,7 @@ https://github.com/user-attachments/assets/7f7d2817-be2e-48e8-9eb0-9dbcc112f42f
 | **Event-aligned Dwell** | 자유 진행 카운터가 아니라 **도달이 연속 유지될 때만** 카운트 — 팔이 실제 도달 전에는 다음 자세로 넘어가지 않음 |
 | **2-Stage Synchronizer + Debounce** | 메타스테이블 방지 2단 FF + 10 ms 카운터 디바운스, level/edge 두 출력 분리 |
 | **Joint Select Ring** | BTNL/BTNR로 Base ↔ Shoulder ↔ Elbow 순환 선택, LED 원-핫 표시 |
-| **7-Segment Multiplexing** | 약 1.5 kHz 시분할로 모드 문자(M/R/P)와 저장 개수 동시 표시 |
+| **7-Segment Multiplexing** | 자리 전환 약 1.5 kHz 시분할로 모드 문자(M/R/P)와 저장 개수 동시 표시 |
 | **Safe Init & Guard** | 모든 관절 초기값 90°(중립), 저장된 자세가 0개면 PLAY 진입 차단 |
 | **Angle Clamping** | 목표각은 0~180° 범위에서만 증감, PWM단에서 한 번 더 클램프 |
 
@@ -85,6 +85,8 @@ wire w_enter_play   = (i_sw_mode == PARAM_MODE_PLAY)   && (r_sw_mode_d != PARAM_
 if (r_pose_count == 4'd0) r_mode <= PARAM_MODE_MANUAL;
 else                      r_mode <= PARAM_MODE_PLAY;
 ```
+
+`i_sw_mode`가 `2'b11`이면 `default` 분기에서 `MANUAL`로 처리합니다.
 
 ---
 
@@ -138,7 +140,7 @@ else                      r_mode <= PARAM_MODE_PLAY;
 
 | Module | 역할 |
 |---|---|
-| `top.v` | 전체 배선 + 도달 검출 및 이벤트 정렬 Dwell 카운터 |
+| `top.v` | 전체 배선 + 도달 검출 및 이벤트 정렬 Dwell 카운터 + 집게 각도 변환 |
 | `tick_gen.v` | jog(50 Hz) / interp(100 Hz) / dwell(1 Hz) 틱 생성 |
 | `debounce.v` | 2단 동기화 + 10 ms 카운터 디바운스, level/edge 분리 출력 |
 | `joint_select.v` | BTNL/BTNR로 관절 인덱스 순환 (0↔1↔2) |
@@ -293,7 +295,7 @@ endmodule
 
 ### Gripper
 
-집게는 각도 제어가 아니라 2상태(열림/닫힘)이므로 1비트로 저장하고, 출력 직전에 각도로 변환합니다.
+집게는 각도 제어가 아니라 2상태(열림/닫힘)이므로 1비트로 저장하고, 출력 직전에 각도로 변환합니다. 보간(`interp`)을 거치지 않으므로 즉시 전환됩니다.
 
 ```verilog
 wire       w_gripper_target_bit = w_play_mode ? w_pose_from_bank[24] : i_sw_gripper;
@@ -333,6 +335,8 @@ assign o_btn_edge = r_level & ~r_level_d;
 | `o_btn_level` | BTNU / BTND (각도 증감) | 누르고 있는 동안 계속 증감해야 하므로 상태 유지형이 필요 |
 | `o_btn_edge` | BTNC (저장) / BTNL·BTNR (관절 선택) | 한 번 누르면 한 번만 동작해야 하므로 1클럭 펄스 필요 |
 
+`top.v`는 버튼 5개 전부에 `debounce`를 인스턴스화하고 필요한 쪽 출력만 연결합니다.
+
 ### Joint Select
 
 ```verilog
@@ -351,24 +355,27 @@ else if (i_btn_right_edge) o_sel_joint <= (o_sel_joint == 2'd2) ? 2'd0 : o_sel_j
 
 ```verilog
 reg [17:0] r_refresh_cnt;
-wire [1:0] w_digit_sel = r_refresh_cnt[17:16];   // 약 1.5 kHz로 4자리 순환
+wire [1:0] w_digit_sel = r_refresh_cnt[17:16];   // 자리 전환 약 1.5 kHz
 ```
 
-| Digit | `w_digit_sel` | 표시 내용 |
-|---|---|---|
-| 1 (최우측) | `2'b00` | 저장된 자세 개수 (0~8, 범위 밖은 `-`) |
-| 2 | `2'b01` | 미사용 (소등) |
-| 3 | `2'b10` | 미사용 (`-` 고정) |
-| 4 (최좌측) | `2'b11` | 현재 모드 — `M` / `R` / `P` |
+| Digit | `w_digit_sel` | `o_an` | 표시 내용 |
+|---|---|---|---|
+| 1 (최우측) | `2'b00` | `4'b1110` | 저장된 자세 개수 (0~8, 범위 밖은 `-`) |
+| 2 | `2'b01` | `4'b1101` | 미사용 (소등) |
+| 3 | `2'b10` | `4'b1011` | 미사용 (`-` 고정) |
+| 4 (최좌측) | `2'b11` | `4'b0111` | 현재 모드 — `M` / `R` / `P` |
 
-100 MHz를 18-bit 카운터의 상위 2비트로 분주하여 자리당 약 1.5 kHz로 전환하므로, 사람 눈에는 4자리가 동시에 켜진 것처럼 보입니다.
+100 MHz를 18-bit 카운터로 분주하므로 `w_digit_sel`은 2¹⁶ = 65,536 클럭(655.36 µs)마다 바뀝니다. 즉 **자리 전환 속도는 약 1.53 kHz, 4자리 한 바퀴(프레임) 갱신률은 약 381 Hz**입니다. 사람 눈에는 4자리가 동시에 켜진 것처럼 보입니다.
 
 ### LED
 
 | LED | 표시 |
 |---|---|
 | `o_led[15:14]` | 현재 모드 (2-bit) |
+| `o_led[13:3]` | 미사용 (`11'b0` 고정) |
 | `o_led[2:0]` | 선택된 관절 원-핫 (`001` Base / `010` Shoulder / `100` Elbow) |
+
+`seg_display`도 동일한 원-핫 LED 출력(`o_led[2:0]`)을 가지고 있지만, `top.v`는 이 포트를 연결하지 않고 자체 조합 논리로 `o_led[2:0]`을 구동합니다 (§17 참고).
 
 ---
 
@@ -418,6 +425,7 @@ set_property CONFIG_MODE SPIx4                [current_design]
 
 - 수동 조작: 50 Hz × 1° → **0°에서 180°까지 3.6초**
 - 자동 재생: 100 Hz × 1° → **0°에서 180°까지 1.8초**
+- 자동 스윙 없이 `SERVO_AUTO_STEP`에 해당하는 개념은 없으며, PLAY의 이동 속도는 `interp_tick`이 단독으로 결정합니다.
 
 ---
 
@@ -441,29 +449,31 @@ set_property CONFIG_MODE SPIx4                [current_design]
 | 재생 부드러움에 나눗셈 필요 | 구간별 증분 계산 방식 | 증분을 1로 고정하고 **틱 주기로 속도 정의**하는 증분 보간 |
 | 집게가 물리지 않거나 계속 떨림 | 0°/180° 이론값이 실제 리밋과 불일치 | 실측으로 `OPEN = 10`, `CLOSE = 160` 결정 |
 | 조합 비교 경로가 FSM에 직접 물림 | 3관절 비교 결과를 바로 사용 | `r_all_reached` 레지스터로 1클럭 동기화 후 사용 |
-| 7세그가 어둡거나 깜빡임 | 리프레시 주파수 부적절 | 18-bit 카운터 상위 2비트로 자리당 약 1.5 kHz 전환 |
+| 7세그가 어둡거나 깜빡임 | 리프레시 주파수 부적절 | 18-bit 카운터 상위 2비트로 자리 전환 약 1.53 kHz (프레임 약 381 Hz) |
 
 ---
 
 ## 14. Repository Structure
 
 ```text
-MimicArm-FPGA-Project/
-├── top.v                 # 최상위 배선 + 도달 검출 + 이벤트 정렬 dwell 카운터
-│
-├── mode_fsm.v            # MANUAL/RECORD/PLAY 상태, pose_count, play_seq, we/addr
-├── reg_bank.v            # D-FF 25-bit × 8 자세 레지스터 뱅크 (BRAM 미사용)
-├── angle_ctrl.v          # 관절별 목표각 레지스터 (MANUAL 증감 / PLAY 오버라이드)
-├── interp.v              # 나눗셈 없는 증분 보간 (관절당 1 인스턴스)
-├── pwm_servo.v           # 각도 → 20 ms PWM 듀티 (곱셈만 사용, 클램프 포함)
-│
-├── joint_select.v        # BTNL/BTNR 관절 순환 선택
-├── debounce.v            # 2단 동기화 + 10 ms 디바운스, level/edge 분리
-├── tick_gen.v            # jog 50 Hz / interp 100 Hz / dwell 1 Hz 틱 생성
-├── seg_display.v         # 4자리 7세그먼트 시분할 표시
-│
-├── Basys-3-Master.xdc    # 핀 제약 및 비트스트림 설정
-└── README.md
+MimicArm/
+├── README.md
+└── MimicArm_Working/
+    ├── top.v                 # 최상위 배선 + 도달 검출 + 이벤트 정렬 dwell 카운터
+    │
+    ├── mode_fsm.v            # MANUAL/RECORD/PLAY 상태, pose_count, play_seq, we/addr
+    ├── reg_bank.v            # D-FF 25-bit × 8 자세 레지스터 뱅크 (BRAM 미사용)
+    ├── angle_ctrl.v          # 관절별 목표각 레지스터 (MANUAL 증감 / PLAY 오버라이드)
+    ├── interp.v              # 나눗셈 없는 증분 보간 (관절당 1 인스턴스)
+    ├── pwm_servo.v           # 각도 → 20 ms PWM 듀티 (곱셈만 사용, 클램프 포함)
+    │
+    ├── joint_select.v        # BTNL/BTNR 관절 순환 선택
+    ├── debounce.v            # 2단 동기화 + 10 ms 디바운스, level/edge 분리
+    ├── tick_gen.v            # jog 50 Hz / interp 100 Hz / dwell 1 Hz 틱 생성
+    ├── seg_display.v         # 4자리 7세그먼트 시분할 표시
+    │
+    ├── Basys-3-Master.xdc    # 핀 제약 및 비트스트림 설정
+    └── asset/image.png       # 장치 사진
 ```
 
 ---
@@ -472,16 +482,16 @@ MimicArm-FPGA-Project/
 
 | File | Description |
 |---|---|
-| [`top.v`](./top.v) | 모듈 통합 배선, 3관절 도달 비교, 이벤트 정렬 dwell 카운터, 집게 각도 변환 |
-| [`mode_fsm.v`](./mode_fsm.v) | 모드 상태 머신, 저장 개수·재생 포인터, 쓰기 주소 타이밍 정렬, PLAY 가드 |
-| [`reg_bank.v`](./reg_bank.v) | BRAM 없는 D-FF 레지스터 뱅크, 25-bit 자세 워드 |
-| [`interp.v`](./interp.v) | 나눗셈 없는 증분 보간의 핵심 (6줄) |
-| [`pwm_servo.v`](./pwm_servo.v) | 상수화된 STEP으로 나눗셈 제거, 각도 클램프, 등록 출력 |
-| [`debounce.v`](./debounce.v) | 메타스테이블 방지 + 채터링 제거 + level/edge 분리 |
-| [`angle_ctrl.v`](./angle_ctrl.v) | 목표각 범위 제한 및 모드별 갱신 경로 |
-| [`tick_gen.v`](./tick_gen.v) | 세 종류 시간 축 생성 |
-| [`seg_display.v`](./seg_display.v) | 시분할 표시 및 세그먼트 디코딩 |
-| [`Basys-3-Master.xdc`](./Basys-3-Master.xdc) | 전체 핀 매핑 및 클럭 제약 |
+| [`top.v`](./MimicArm_Working/top.v) | 모듈 통합 배선, 3관절 도달 비교, 이벤트 정렬 dwell 카운터, 집게 각도 변환 |
+| [`mode_fsm.v`](./MimicArm_Working/mode_fsm.v) | 모드 상태 머신, 저장 개수·재생 포인터, 쓰기 주소 타이밍 정렬, PLAY 가드 |
+| [`reg_bank.v`](./MimicArm_Working/reg_bank.v) | BRAM 없는 D-FF 레지스터 뱅크, 25-bit 자세 워드 |
+| [`interp.v`](./MimicArm_Working/interp.v) | 나눗셈 없는 증분 보간의 핵심 (본문 6줄) |
+| [`pwm_servo.v`](./MimicArm_Working/pwm_servo.v) | 상수화된 STEP으로 나눗셈 제거, 각도 클램프, 등록 출력 |
+| [`debounce.v`](./MimicArm_Working/debounce.v) | 메타스테이블 방지 + 채터링 제거 + level/edge 분리 |
+| [`angle_ctrl.v`](./MimicArm_Working/angle_ctrl.v) | 목표각 범위 제한 및 모드별 갱신 경로 |
+| [`tick_gen.v`](./MimicArm_Working/tick_gen.v) | 세 종류 시간 축 생성 |
+| [`seg_display.v`](./MimicArm_Working/seg_display.v) | 시분할 표시 및 세그먼트 디코딩 |
+| [`Basys-3-Master.xdc`](./MimicArm_Working/Basys-3-Master.xdc) | 전체 핀 매핑 및 클럭 제약 |
 
 ---
 
@@ -517,6 +527,7 @@ MimicArm-FPGA-Project/
 - RECORD 중 개별 슬롯 수정·삭제 기능 (현재는 진입 시 전체 클리어만 가능)
 - `seg_display`의 `o_led` 포트가 `top`에서 미연결 상태 — LED 구동 경로를 한쪽으로 정리
 - 사용하지 않는 `tick_gen.o_dwell_tick` 정리 또는 용도 확정
+- 집게를 `interp`에 태워 개폐도 부드럽게 (현재는 즉시 전환)
 - 각 모듈 테스트벤치 작성 및 시뮬레이션 파형 문서화
 - 자세 슬롯 수를 파라미터화해 8개 이상으로 확장 (D-FF 자원 한계 검토 포함)
 
@@ -526,6 +537,6 @@ MimicArm-FPGA-Project/
 
 **Digital Logic Design · Verilog · FSM · Servo PWM · Teach & Playback**
 
-GitHub: [@kimdk1005-collab](https://github.com/kimdk1005-collab)
+GitHub: [@LDdd130](https://github.com/LDdd130)
 
 </div>
