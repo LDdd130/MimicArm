@@ -12,14 +12,11 @@
   <img src="https://img.shields.io/badge/No-BRAM%20%C2%B7%20XADC%20%C2%B7%20Divider-2E8B57?style=flat-square" alt="No BRAM/XADC/Divider">
 </p>
 
-<!-- TODO: assets/ 폴더에 아래 이미지를 추가한 뒤 주석을 해제하세요. -->
 <p>
   <img src="./MimicArm_Working/asset/image.png" width="250" alt="MimicArm">
-  &nbsp;&nbsp;
-  <!-- <img src="./assets/basys3_panel.png" width="35%" alt="Basys-3 Control Panel"> -->
 </p>
 
-**보드의 버튼과 스위치만으로 3축 로봇 팔을 조작하고, 원하는 자세를 D-FF 레지스터 뱅크에 기억시킨 뒤 부드럽게 자동 재생하는 순수 순차회로 설계 프로젝트입니다.**
+보드의 버튼과 스위치만으로 3축 로봇 팔을 조작하고, 원하는 자세를 D-FF 레지스터 뱅크에 기억시킨 뒤 자동 재생하는 순수 순차회로 설계 프로젝트입니다.
 
 ### :movie_camera: 시연 영상
 
@@ -31,16 +28,16 @@ https://github.com/user-attachments/assets/7f7d2817-be2e-48e8-9eb0-9dbcc112f42f
 
 ## 1. Project Overview
 
-산업용 로봇 팔의 **Teach & Playback**(작업자가 자세를 가르치면 그대로 반복 재생) 원리를, 디지털 논리회로 수업에서 배운 D-FF·카운터·비교기만으로 구현하는 것이 목표였습니다.
+산업용 로봇 팔의 Teach & Playback(작업자가 자세를 가르치면 그대로 반복 재생) 원리를, 디지털 논리회로 수업에서 배운 D-FF·카운터·비교기만으로 구현하는 것이 목표였습니다.
 
-설계상 가장 중요한 결정은 **무엇을 쓰지 않을 것인가**였습니다. 아날로그 조이스틱(XADC), 대용량 메모리(BRAM IP), 나눗셈 연산자 — 세 가지를 모두 배제하고 보드 내장 입력과 D-FF 레지스터, 곱셈·비교만으로 전체 기능을 구성했습니다. 그 결과 설계 전체가 파형 시뮬레이션으로 추적 가능하고, IP 블랙박스 없이 동작 원리를 끝까지 설명할 수 있는 구조가 되었습니다.
+아날로그 조이스틱(XADC), 대용량 메모리(BRAM IP), 나눗셈 연산자 세 가지를 쓰지 않기로 정하고 시작했습니다. 보드 내장 입력과 D-FF 레지스터, 곱셈·비교만으로 전체 기능을 구성했습니다. 덕분에 설계 전체를 파형 시뮬레이션으로 추적할 수 있고, IP 블랙박스 없이 동작 원리를 설명할 수 있습니다.
 
-"부드러운 재생"은 보통 시작각과 목표각 사이를 보간(interpolation)하는 나눗셈으로 구현하지만, 여기서는 **일정 주기마다 현재각을 ±1씩 목표각으로 접근시키는 증분 보간**으로 나눗셈 없이 해결했습니다. PWM 듀티 계산 역시 `(2.0 ms − 1.0 ms) / 180`을 파라미터로 미리 계산해두고 런타임에는 곱셈만 수행합니다.
+자세 사이를 부드럽게 잇는 보간은 보통 `(목표각 − 시작각) / 스텝수` 나눗셈으로 구현합니다. 여기서는 일정 주기마다 현재각을 ±1씩 목표각으로 접근시키는 증분 보간을 써서 나눗셈 없이 해결했습니다. PWM 듀티 계산 역시 `(2.0 ms − 1.0 ms) / 180`을 파라미터로 미리 계산해두고 런타임에는 곱셈만 수행합니다.
 
 | 항목 | 내용 |
 |---|---|
-| 프로젝트 형태 | 팀 프로젝트 (3인) <!-- TODO: 본인 담당 모듈/역할을 확정해 주세요 --> |
-| 담당 범위 | <!-- TODO: 예) mode_fsm, reg_bank 설계 / interp·pwm_servo 설계 / 입력·표시부 --> |
+| 프로젝트 형태 | 팀 프로젝트 (3인) |
+| 담당 범위 | **[작성 필요 — 예: `mode_fsm`·`reg_bank` 설계 / `interp`·`pwm_servo` 설계 / 입력·표시부]** |
 | 대상 보드 | Digilent Basys 3 (Xilinx Artix-7, XC7A35T) |
 | System Clock | 100 MHz (`create_clock -period 10.00`) |
 | HDL | Verilog |
@@ -92,12 +89,6 @@ else                      r_mode <= PARAM_MODE_PLAY;
 
 ## 4. Module Hierarchy & Dataflow
 
-<!-- TODO: assets/block_diagram.png 추가 후 주석 해제
-<p align="center">
-  <img src="./assets/block_diagram.png" width="100%" alt="MimicArm Block Diagram">
-</p>
--->
-
 ```text
                           ┌──────────┐
    i_clk 100MHz ─────────►│ tick_gen │─ jog_tick   50 Hz (20 ms)
@@ -128,7 +119,7 @@ else                      r_mode <= PARAM_MODE_PLAY;
                    ▼                            ▼
             ┌─────────────┐          ┌────────────────────┐  interp_tick
             │ seg_display │          │  interp × 3        │◄──────────
-            │ 4-digit MUX │          │  현재각 ±1 접근     │
+            │ 4-digit MUX │          │  현재각 ±1 접근    │
             └─────────────┘          └─────────┬──────────┘
                                                │ cur_base/sh/el
                                                ▼
@@ -155,7 +146,7 @@ else                      r_mode <= PARAM_MODE_PLAY;
 
 ## 5. Register Bank — BRAM 대신 D-FF
 
-자세 하나를 **25-bit 단일 워드**로 묶어 저장합니다. 관절 각도를 따로 저장하지 않고 한 워드로 처리하므로, 쓰기·읽기 시 필드 간 타이밍이 어긋날 여지가 없습니다.
+자세 하나를 25-bit 단일 워드로 묶어 저장합니다. 관절 각도를 따로 저장하지 않고 한 워드로 처리하므로, 쓰기·읽기 시 필드 간 타이밍이 어긋날 여지가 없습니다.
 
 ```verilog
 // {집게 1bit, elbow 8bit, shoulder 8bit, base 8bit}
@@ -192,13 +183,13 @@ assign o_addr = (r_mode == PARAM_MODE_PLAY) ? r_play_seq : r_pose_count[2:0];
 assign o_we   = (r_mode == PARAM_MODE_RECORD) && i_btn_save && (r_pose_count < 4'd8);
 ```
 
-`r_pose_count`는 `always` 블록 안에서 증가하고, `o_addr`는 **증가 전 값**을 조합으로 내보냅니다. 두 동작이 같은 클럭 엣지에서 일어나므로 저장 주소는 항상 "현재 개수" = 다음 빈 슬롯이 됩니다. 저장 개수가 8에 도달하면 `o_we`가 자동으로 막혀 오버플로가 발생하지 않습니다.
+`r_pose_count`는 `always` 블록 안에서 증가하고, `o_addr`는 증가 전 값을 조합으로 내보냅니다. 두 동작이 같은 클럭 엣지에서 일어나므로 저장 주소는 항상 "현재 개수" = 다음 빈 슬롯이 됩니다. 저장 개수가 8에 도달하면 `o_we`가 자동으로 막혀 오버플로가 발생하지 않습니다.
 
 ---
 
 ## 6. Incremental Interpolation — 나눗셈 없는 부드러운 재생
 
-일반적인 보간은 `(목표각 − 시작각) / 스텝수`로 증분을 계산하지만, 이 설계는 **증분을 항상 1로 고정**하고 대신 **틱 간격으로 속도를 정의**합니다.
+일반적인 보간은 `(목표각 − 시작각) / 스텝수`로 증분을 계산하지만, 이 설계는 증분을 항상 1로 고정하고, 대신 틱 간격으로 속도를 정의합니다.
 
 ```verilog
 module interp #(parameter PARAM_INIT_ANGLE = 8'd90)(...);
@@ -226,11 +217,11 @@ endmodule
 
 ---
 
-## 7. Event-Aligned Dwell — 재생 타이밍의 핵심
+## 7. Event-Aligned Dwell
 
-초기 설계는 `tick_gen`의 자유 진행 1 Hz `dwell_tick`으로 다음 자세로 넘어갔습니다. 하지만 이 방식은 **팔이 아직 목표에 도달하지 못했어도 시간만 지나면 다음 자세로 넘어가는** 문제가 있었습니다. 자세 간 이동 거리가 다르면 어떤 구간은 도중에 잘리고 어떤 구간은 필요 이상으로 기다립니다.
+초기 설계는 `tick_gen`의 자유 진행 1 Hz `dwell_tick`으로 다음 자세로 넘어갔습니다. 하지만 이 방식은 팔이 아직 목표에 도달하지 못했어도 시간만 지나면 다음 자세로 넘어갑니다. 자세 간 이동 거리가 다르면 어떤 구간은 도중에 잘리고 어떤 구간은 필요 이상으로 기다립니다.
 
-해결은 dwell 카운터를 **시간이 아니라 도달 이벤트에 정렬**시키는 것이었습니다.
+dwell 카운터를 시간이 아니라 도달 이벤트에 정렬시켜 해결했습니다.
 
 ```verilog
 wire w_all_reached_comb = (w_target_base     == w_cur_base) &&
@@ -253,7 +244,7 @@ end
 ```
 
 - **3개 관절이 모두 도달**해야 카운트가 시작됩니다.
-- 도달 상태가 풀리면 카운터는 즉시 0으로 — 부분 도달로는 절대 진행하지 않습니다.
+- 도달 상태가 풀리면 카운터는 즉시 0으로 — 부분 도달 상태에서는 다음 자세로 진행하지 않습니다.
 - 완료 시 정확히 1클럭 펄스만 발생시켜 `mode_fsm`이 포인터를 **한 칸만** 이동하도록 보장합니다.
 - 조합 비교 결과를 레지스터로 한 번 받아(`r_all_reached`) 조합 경로가 FSM에 직접 물리지 않게 했습니다.
 
@@ -261,7 +252,7 @@ end
 |---|---:|---|
 | `PARAM_DWELL_CNT` | 99,999,999 | 도달 후 유지 시간 = 1 s @ 100 MHz |
 
-`tick_gen`의 `o_dwell_tick`은 **의도적으로 미사용**으로 남겨 두었습니다(모듈 인터페이스는 유지).
+`tick_gen`의 `o_dwell_tick`은 의도적으로 미사용으로 남겨 두었습니다(모듈 인터페이스는 유지).
 
 ---
 
@@ -328,7 +319,7 @@ end else                  r_cnt   <= 20'd0;
 assign o_btn_edge = r_level & ~r_level_d;
 ```
 
-**level과 edge 두 출력을 분리**한 것이 설계 포인트입니다.
+level과 edge 두 출력을 분리했습니다.
 
 | 출력 | 사용처 | 이유 |
 |---|---|---|
@@ -365,7 +356,7 @@ wire [1:0] w_digit_sel = r_refresh_cnt[17:16];   // 자리 전환 약 1.5 kHz
 | 3 | `2'b10` | `4'b1011` | 미사용 (`-` 고정) |
 | 4 (최좌측) | `2'b11` | `4'b0111` | 현재 모드 — `M` / `R` / `P` |
 
-100 MHz를 18-bit 카운터로 분주하므로 `w_digit_sel`은 2¹⁶ = 65,536 클럭(655.36 µs)마다 바뀝니다. 즉 **자리 전환 속도는 약 1.53 kHz, 4자리 한 바퀴(프레임) 갱신률은 약 381 Hz**입니다. 사람 눈에는 4자리가 동시에 켜진 것처럼 보입니다.
+100 MHz를 18-bit 카운터로 분주하므로 `w_digit_sel`은 2¹⁶ = 65,536 클럭(655.36 µs)마다 바뀝니다. 즉 자리 전환 속도는 약 1.53 kHz, 4자리 한 바퀴(프레임) 갱신률은 약 381 Hz입니다. 사람 눈에는 4자리가 동시에 켜진 것처럼 보입니다.
 
 ### LED
 
@@ -417,15 +408,17 @@ set_property CONFIG_MODE SPIx4                [current_design]
 | `PARAM_INTERP_MAX` | `tick_gen` | 999,999 | 10 ms (100 Hz) — 보간 갱신 주기 |
 | `PARAM_DWELL_MAX` | `tick_gen` | 99,999,999 | 1 s (1 Hz) — 미사용 (이벤트 정렬 카운터로 대체) |
 | `PARAM_DWELL_CNT` | `top` | 99,999,999 | 1 s — 도달 후 머무름 시간 |
-| `PARAM_DEBOUNCE_MAX_COUNT` | `debounce` | 1,000,000 | 10 ms — 채터링 판정 시간 |
+| `PARAM_DEBOUNCE_MAX_COUNT` * | `debounce` | 1,000,000 | 10 ms — 채터링 판정 시간 |
 | `PARAM_PERIOD_CNT` | `pwm_servo` | 2,000,000 | 20 ms — 서보 PWM 주기 |
 | `PARAM_MIN_DUTY` | `pwm_servo` | 100,000 | 1.0 ms — 0° 펄스 폭 |
 | `PARAM_STEP` | `pwm_servo` | 556 | 5.56 µs/° |
 | `PARAM_INIT_ANGLE` | `interp` | 90 | 부팅·리셋 시 중립 자세 |
 
+\* `PARAM_DEBOUNCE_MAX_COUNT`만 `parameter`가 아닌 `localparam`으로 선언되어 있어 인스턴스 단위 Override는 불가합니다.
+
 - 수동 조작: 50 Hz × 1° → **0°에서 180°까지 3.6초**
 - 자동 재생: 100 Hz × 1° → **0°에서 180°까지 1.8초**
-- 자동 스윙 없이 `SERVO_AUTO_STEP`에 해당하는 개념은 없으며, PLAY의 이동 속도는 `interp_tick`이 단독으로 결정합니다.
+- PLAY의 이동 속도는 별도 속도 파라미터 없이 `interp_tick` 주기가 단독으로 결정합니다.
 
 ---
 
@@ -485,7 +478,7 @@ MimicArm/
 | [`top.v`](./MimicArm_Working/top.v) | 모듈 통합 배선, 3관절 도달 비교, 이벤트 정렬 dwell 카운터, 집게 각도 변환 |
 | [`mode_fsm.v`](./MimicArm_Working/mode_fsm.v) | 모드 상태 머신, 저장 개수·재생 포인터, 쓰기 주소 타이밍 정렬, PLAY 가드 |
 | [`reg_bank.v`](./MimicArm_Working/reg_bank.v) | BRAM 없는 D-FF 레지스터 뱅크, 25-bit 자세 워드 |
-| [`interp.v`](./MimicArm_Working/interp.v) | 나눗셈 없는 증분 보간의 핵심 (본문 6줄) |
+| [`interp.v`](./MimicArm_Working/interp.v) | 나눗셈 없는 증분 보간 (본문 6줄) |
 | [`pwm_servo.v`](./MimicArm_Working/pwm_servo.v) | 상수화된 STEP으로 나눗셈 제거, 각도 클램프, 등록 출력 |
 | [`debounce.v`](./MimicArm_Working/debounce.v) | 메타스테이블 방지 + 채터링 제거 + level/edge 분리 |
 | [`angle_ctrl.v`](./MimicArm_Working/angle_ctrl.v) | 목표각 범위 제한 및 모드별 갱신 경로 |
@@ -508,14 +501,14 @@ MimicArm/
 
 ### What I Learned
 
-- 조합 논리와 순차 논리의 경계 설계 — 조합 비교 결과를 레지스터로 받아 타이밍 경로를 끊는 이유
-- 비동기 외부 입력을 클럭 도메인으로 안전히 가져오는 2단 동기화의 필요성
-- 카운터 기반 디바운스에서 "임계 시간"과 "상태 갱신 시점"을 분리하는 방법
-- 나눗셈처럼 비용이 큰 연산을 **파라미터 상수화**와 **증분 알고리즘**으로 회피하는 설계 전략
-- 쓰기 주소와 카운터 증가가 같은 클럭 엣지에서 일어날 때의 타이밍 정렬
-- 자유 진행 카운터와 이벤트 정렬 카운터의 차이, 그리고 후자가 필요한 상황
-- 1클럭 펄스 계약(handshake)으로 모듈 간 상태 전이를 정확히 1회만 발생시키는 방법
-- 서보의 이론 스펙과 실측값 차이를 파라미터로 흡수하는 실용적 접근
+- 조합 비교 결과를 레지스터로 한 번 받으면 타이밍 경로가 끊깁니다. 조합/순차 경계를 어디에 둘지 정하는 감각이 생겼습니다.
+- 비동기 외부 입력은 2단 동기화를 거쳐야 메타스테이블 상태가 내부로 퍼지지 않습니다.
+- 카운터 디바운스에서 임계 시간과 상태 갱신 시점을 분리해야 채터링 구간에서 값이 흔들리지 않았습니다.
+- 나눗셈은 파라미터 상수화와 증분 알고리즘 두 가지로 피할 수 있었습니다.
+- 쓰기 주소와 카운터 증가가 같은 클럭 엣지에서 일어날 때 어느 값이 나가는지 파형으로 확인해야 했습니다.
+- 자유 진행 카운터를 이벤트 정렬 카운터로 바꾸자 도달 전 전환 문제가 사라졌습니다.
+- 모듈 간 상태 전이는 1클럭 펄스 계약으로 주고받아야 정확히 1회만 발생합니다.
+- 서보의 이론 스펙과 실측값은 달랐고, 그 차이는 파라미터로 흡수했습니다.
 
 ---
 
@@ -534,8 +527,6 @@ MimicArm/
 ---
 
 <div align="center">
-
-**Digital Logic Design · Verilog · FSM · Servo PWM · Teach & Playback**
 
 GitHub: [@LDdd130](https://github.com/LDdd130)
 
