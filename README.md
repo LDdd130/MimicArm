@@ -89,45 +89,10 @@ else                      r_mode <= PARAM_MODE_PLAY;
 
 ## 4. Module Hierarchy & Dataflow
 
-```text
-                          ┌──────────┐
-   i_clk 100MHz ─────────►│ tick_gen │─ jog_tick   50 Hz (20 ms)
-                          │          │─ interp_tick 100 Hz (10 ms)
-                          └──────────┘
-
-  BTNL/BTNR ─┐                        ┌──────────────┐
-             ├─►│debounce│─ edge ────►│ joint_select │─ w_joint_sel[1:0] ─┐
-  BTNC ──────┤   (×5)     ─ edge ──┐  └──────────────┘                    │
-  BTNU/BTND ─┘              level ─┼──────────────────────────────────────┤
-                                   │                                      ▼
-   i_sw_mode[1:0] ─┐               │                            ┌──────────────┐
-                   ▼               │                    jog_tick│  angle_ctrl  │
-            ┌─────────────┐        │                   ────────►│ ±1° 목표각   │
-            │  mode_fsm   │◄───────┘  i_btn_save                └──────┬───────┘
-            │ MANUAL /    │◄─── r_target_reached_pulse (top)           │
-            │ RECORD /    │                                     target_base/sh/el
-            │ PLAY        │─ o_we, o_addr[2:0] ──┐                     │
-            └──────┬──────┘─ o_pose_count[3:0]   │      {sw_gripper, el, sh, base}
-                   │        ─ o_play_mode ───────┼──────────────┐      │
-                   │                             ▼              │      │
-                   │                     ┌──────────────┐       │      │
-                   │                     │  reg_bank    │◄──────┘      │
-                   │                     │ D-FF 25b × 8 │              │
-                   │                     └──────┬───────┘              │
-                   │                            │ o_pose_data ─────────┘
-                   │                            │        (PLAY 모드에서 목표각 오버라이드)
-                   ▼                            ▼
-            ┌─────────────┐          ┌────────────────────┐  interp_tick
-            │ seg_display │          │  interp × 3        │◄──────────
-            │ 4-digit MUX │          │  현재각 ±1 접근    │
-            └─────────────┘          └─────────┬──────────┘
-                                               │ cur_base/sh/el
-                                               ▼
-                                     ┌────────────────────┐
-                                     │  pwm_servo × 4     │──► JA1~JA4
-                                     │  20 ms / 1~2 ms    │    서보 4개
-                                     └────────────────────┘
-```
+<p align="center">
+  <img src="./MimicArm_Working/asset/architecture.svg" width="100%"
+       alt="MimicArm 모듈 계층과 데이터 흐름 — 버튼 입력의 디바운스부터 모드 제어, 자세 저장, 증분 보간, 4채널 서보 PWM 출력까지의 연결을 나타낸다.">
+</p>
 
 | Module | 역할 |
 |---|---|
